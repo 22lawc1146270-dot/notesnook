@@ -96,12 +96,18 @@ jobs:
       # - name: Build unsigned app bundle
       #   run: yarn release:android:bundle
 
-      # ✅ Build UNSIGNED arm64-v8a APK ONLY
-      - name: Build unsigned arm64-v8a APK
+      # ❌ arm64-only build DISABLED (causes no APK output)
+      # - name: Build unsigned arm64-v8a APK
+      #   run: |
+      #     cd apps/mobile/android
+      #     ./gradlew assembleRelease \
+      #       -Pandroid.injected.build.abi=arm64-v8a
+
+      # ✅ Build UNSIGNED universal release APK
+      - name: Build unsigned release APK
         run: |
           cd apps/mobile/android
-          ./gradlew assembleRelease \
-            -Pandroid.injected.build.abi=arm64-v8a
+          ./gradlew assembleRelease
 
       - name: CCache Stats after build
         run: ccache -sv
@@ -130,13 +136,12 @@ jobs:
       # - name: Create release draft on Github
       #   uses: softprops/action-gh-release@v1
 
-      # ✅ Upload ONLY unsigned arm64-v8a APK as artifact
-      - name: Upload arm64-v8a unsigned APK
+      # ✅ Upload unsigned release APK
+      - name: Upload unsigned release APK
         uses: actions/upload-artifact@v4
         with:
-          name: notesnook-android-arm64-v8a-unsigned
-          path: |
-            apps/mobile/android/app/build/outputs/apk/release/*arm64-v8a*-unsigned.apk
+          name: notesnook-android-unsigned
+          path: apps/mobile/android/app/build/outputs/apk/release/app-release.apk
 
       # ❌ Optional: remove sourcemaps if not needed
       # - name: Upload sourcemaps
