@@ -27,12 +27,7 @@ jobs:
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@main
         with:
-          # this might remove tools that are actually needed,
-          # if set to "true" but frees about 6 GB
           tool-cache: false
-
-          # all of these default to true, but feel free to set to
-          # "false" if necessary for your workflow
           android: false
           dotnet: true
           haskell: true
@@ -97,77 +92,44 @@ jobs:
       - name: Remove debug keystore
         run: rm -rf apps/mobile/android/app/debug.keystore
 
-      - name: Build unsigned app bundle
-        run: yarn release:android:bundle
+      # Build Step
+      - name: Build apks
+        run: yarn release:android
 
       - name: CCache Stats after build
         run: ccache -sv
 
-      - name: Sign app bundle for Playstore release
-        id: sign_app
-        uses: r0adkll/sign-android-release@master
-        with:
-          releaseDirectory: apps/mobile/android/app/build/outputs/bundle/release
-          signingKeyBase64: ${{ secrets.SIGNING_KEY }}
-          alias: ${{ secrets.ALIAS }}
-          keyStorePassword: ${{ secrets.KEY_PASSWORD }}
-          keyPassword: ${{ secrets.KEY_PASSWORD }}
-        env:
-          BUILD_TOOLS_VERSION: "33.0.0"
+      # Commenting out all Signing and Publishing steps per request
+      # - name: Sign app bundle for Playstore release
+      #   id: sign_app
+      #   uses: r0adkll/sign-android-release@master
+      #   ...
 
-      - name: Build apks for Github release
-        run: yarn release:android
+      # - name: Sign apk files
+      #   id: sign_apk
+      #   uses: r0adkll/sign-android-release@master
+      #   ...
 
-      - name: Sign apk files
-        id: sign_apk
-        uses: r0adkll/sign-android-release@master
-        with:
-          releaseDirectory: apps/mobile/android/app/build/outputs/apk/release
-          signingKeyBase64: ${{ secrets.PUBLIC_SIGNING_KEY }}
-          alias: ${{ secrets.PUBLIC_ALIAS }}
-          keyStorePassword: ${{ secrets.PUBLIC_KEY_PASSWORD }}
-          keyPassword: ${{ secrets.PUBLIC_KEY_PASSWORD }}
-        env:
-          BUILD_TOOLS_VERSION: "33.0.0"
-
-      - name: Rename apk files
+      - name: Rename unsigned apk files
         run: |
           cd apps/mobile/android/app/build/outputs/apk/release/
-          mv app-arm64-v8a-release-unsigned-signed.apk notesnook-arm64-v8a.apk
-          mv app-armeabi-v7a-release-unsigned-signed.apk notesnook-armeabi-v7a.apk
-          mv app-x86-release-unsigned-signed.apk notesnook-x86.apk
-          mv app-x86_64-release-unsigned-signed.apk notesnook-x86_64.apk
+          mv app-arm64-v8a-release-unsigned.apk notesnook-arm64-v8a-unsigned.apk
+          mv app-armeabi-v7a-release-unsigned.apk notesnook-armeabi-v7a-unsigned.apk
+          mv app-x86-release-unsigned.apk notesnook-x86-unsigned.apk
+          mv app-x86_64-release-unsigned.apk notesnook-x86_64-unsigned.apk
 
-      - name: Get app version
-        id: package-version
-        uses: saionaro/extract-package-version@master
+      - name: Upload APK Artifacts
+        uses: actions/upload-artifact@v4
         with:
-          path: apps/mobile
+          name: notesnook-unsigned-apks
+          path: |
+            apps/mobile/android/app/build/outputs/apk/release/*.apk
 
-      - name: Publish to Playstore
-        id: deploy
-        uses: r0adkll/upload-google-play@v1.1.1
-        with:
-          serviceAccountJsonPlainText: ${{ secrets.SERVICE_ACCOUNT_JSON }}
-          packageName: com.streetwriters.notesnook
-          releaseFiles: ${{steps.sign_app.outputs.signedReleaseFile}}
-          track: production
-          status: completed
-          whatsNewDirectory: apps/mobile/android/releasenotes/
+      # - name: Publish to Playstore
+      #   ...
 
-      - name: Create release draft on Github
-        uses: softprops/action-gh-release@v1
-        with:
-          draft: true
-          tag_name: ${{ steps.package-version.outputs.version}}-android
-          name: Notesnook Android v${{ steps.package-version.outputs.version}}
-          repository: streetwriters/notesnook
-          token: ${{ secrets.GITHUB_TOKEN }}
-          files: |
-            apps/mobile/android/app/build/outputs/apk/release/notesnook-arm64-v8a.apk
-            apps/mobile/android/app/build/outputs/apk/release/notesnook-armeabi-v7a.apk
-            apps/mobile/android/app/build/outputs/apk/release/notesnook-x86.apk
-            apps/mobile/android/app/build/outputs/apk/release/notesnook-x86_64.apk
+      # - name: Create release draft on Github
+      #   ...
 
       - name: Upload sourcemaps
         uses: actions/upload-artifact@v4
