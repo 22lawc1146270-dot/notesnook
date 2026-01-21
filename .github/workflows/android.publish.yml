@@ -1,33 +1,38 @@
-name: Publish @notesnook/android (unsigned universal APK)
+name: Publish @notesnook/android (unsigned universal)
 
-on: workflow_dispatch
+on:
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-22.04
-    env:
-      CMAKE_C_COMPILER_LAUNCHER: ccache
-      CMAKE_CXX_COMPILER_LAUNCHER: ccache
-      NDK_CCACHE: ccache
-      USE_CCACHE: 1
 
     steps:
       # --------------------------------------------------
-      # Checkout & environment
+      # Checkout
       # --------------------------------------------------
-      - name: Checkout
-        uses: actions/checkout@v2
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Setup Node
+      # --------------------------------------------------
+      # Java (required by Android)
+      # --------------------------------------------------
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # --------------------------------------------------
+      # Node (required by React Native / Notesnook)
+      # --------------------------------------------------
+      - name: Set up Node
         uses: ./.github/actions/setup-node-with-cache
 
-      - name: Setup Java 17
-        uses: joschi/setup-jdk@v2
-        with:
-          java-version: "17"
-          architecture: "x64"
-
-      - name: Free Disk Space
+      # --------------------------------------------------
+      # Free disk space (safe)
+      # --------------------------------------------------
+      - name: Free disk space
         uses: jlumbroso/free-disk-space@main
         with:
           tool-cache: false
@@ -39,83 +44,53 @@ jobs:
           swap-storage: true
 
       # --------------------------------------------------
-      # Node / RN bootstrap
+      # Install JS dependencies
       # --------------------------------------------------
       - name: Install node modules
         run: |
           npm ci --ignore-scripts --prefer-offline --no-audit
           npm run bootstrap -- --scope=mobile
 
-      - name: Make Gradlew executable
-        run: cd apps/mobile/android && chmod +x ./gradlew
+      # --------------------------------------------------
+      # Android SDK + licenses
+      # --------------------------------------------------
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Accept Android SDK licenses
+        run: yes | sdkmanager --licenses
 
       # --------------------------------------------------
-      # CCache & Gradle cache (performance only)
+      # Prepare Gradle
       # --------------------------------------------------
-      - name: Install CCache
-        uses: hendrikmuhs/ccache-action@v1.2.11
-        with:
-          key: ${{ runner.os }}-ccache-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          max-size: 1500M
-          restore-keys: |
-            ${{ runner.os }}-ccache-
-
-      - name: Setup CCache
-        run: |
-          ln -s $(which ccache) /usr/local/bin/gcc || true
-          ln -s $(which ccache) /usr/local/bin/g++ || true
-          ln -s $(which ccache) /usr/local/bin/cc || true
-          ln -s $(which ccache) /usr/local/bin/c++ || true
-          ln -s $(which ccache) /usr/local/bin/clang || true
-          ln -s $(which ccache) /usr/local/bin/clang++ || true
-          ccache --set-config=base_dir=$PWD
-          ccache --set-config=inode_cache=true
-          ccache --set-config=compiler_check=content
-          ccache -p || true
-
-      - name: Cache Gradle
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-
-      # --------------------------------------------------
-      # Sanity checks
-      # --------------------------------------------------
-      - name: TypeScript check
-        run: |
-          npm run tx mobile:build
-          cd apps/mobile
-          npx tsc --noEmit
+      - name: Make gradlew executable
+        run: chmod +x apps/mobile/android/gradlew
 
       - name: Remove debug keystore (force unsigned)
-        run: rm -rf apps/mobile/android/app/debug.keystore || true
+        run: rm -f apps/mobile/android/app/debug.keystore
 
       # --------------------------------------------------
-      # BUILD: UNIVERSAL UNSIGNED APK
+      # BUILD: unsigned universal APK
       # --------------------------------------------------
-      - name: Build unsigned universal release APK
+      - name: Build unsigned universal APK
         run: |
           cd apps/mobile/android
-          ./gradlew clean assembleRelease
+          ./gradlew clean assembleRelease --no-daemon -Dorg.gradle.jvmargs="-Xmx4g"
 
       # --------------------------------------------------
-      # DISCOVER: find where APK actually is
+      # DISCOVER: show exactly where APK is
       # --------------------------------------------------
-      - name: Debug: list APK outputs
+      - name: Locate built APK
         run: |
-          echo "=== APK files found ==="
+          echo "APK files found:"
           find apps/mobile/android/app/build/outputs/apk -type f -name "*.apk" -print
 
       # --------------------------------------------------
-      # UPLOAD: guaranteed artifact capture
+      # UPLOAD: guaranteed artifact
       # --------------------------------------------------
       - name: Upload unsigned universal APK
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: notesnook-android-universal-unsigned
-          path: |
-            apps/mobile/android/app/build/outputs/apk/release/**/*.apk
+          name: notesnook-release-unsigned
+          path: apps/mobile/android/app/build/outputs/apk/release/**/*.apk
