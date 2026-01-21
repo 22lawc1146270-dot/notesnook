@@ -9,13 +9,13 @@ jobs:
 
     steps:
       # --------------------------------------------------
-      # Checkout
+      # Checkout source
       # --------------------------------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
 
       # --------------------------------------------------
-      # Java (required by Android)
+      # Set up Java
       # --------------------------------------------------
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -24,13 +24,13 @@ jobs:
           java-version: "17"
 
       # --------------------------------------------------
-      # Node (required by React Native / Notesnook)
+      # Set up Node (React Native)
       # --------------------------------------------------
       - name: Set up Node
         uses: ./.github/actions/setup-node-with-cache
 
       # --------------------------------------------------
-      # Free disk space (safe)
+      # Free up space (optional, safe)
       # --------------------------------------------------
       - name: Free disk space
         uses: jlumbroso/free-disk-space@main
@@ -52,12 +52,16 @@ jobs:
           npm run bootstrap -- --scope=mobile
 
       # --------------------------------------------------
-      # Android SDK + licenses
+      # Android SDK installation (official workflow style)
       # --------------------------------------------------
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Accept Android SDK licenses
+      - name: Install required SDK components
+        run: |
+          sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+
+      - name: Accept Android licenses
         run: yes | sdkmanager --licenses
 
       # --------------------------------------------------
@@ -66,27 +70,29 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x apps/mobile/android/gradlew
 
-      - name: Remove debug keystore (force unsigned)
-        run: rm -f apps/mobile/android/app/debug.keystore
+      - name: Remove debug keystore
+        run: rm -f apps/mobile/android/app/debug.keystore || true
 
       # --------------------------------------------------
-      # BUILD: unsigned universal APK
+      # Build (unsigned universal release)
       # --------------------------------------------------
       - name: Build unsigned universal APK
         run: |
           cd apps/mobile/android
-          ./gradlew clean assembleRelease --no-daemon -Dorg.gradle.jvmargs="-Xmx4g"
+          ./gradlew clean assembleRelease \
+            --no-daemon \
+            -Dorg.gradle.jvmargs="-Xmx4g"
 
       # --------------------------------------------------
-      # DISCOVER: show exactly where APK is
+      # Debug: check where APK was created
       # --------------------------------------------------
-      - name: Locate built APK
+      - name: Locate built APKs
         run: |
-          echo "APK files found:"
+          echo "Listing all APKs under outputs:"
           find apps/mobile/android/app/build/outputs/apk -type f -name "*.apk" -print
 
       # --------------------------------------------------
-      # UPLOAD: guaranteed artifact
+      # Upload as artifact
       # --------------------------------------------------
       - name: Upload unsigned universal APK
         if: always()
